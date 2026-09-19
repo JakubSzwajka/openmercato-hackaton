@@ -7,9 +7,11 @@
  * and that the messages thread at `/backend/messages` always says exactly what
  * the Inbox Ops email says.
  *
- * Nothing about the mail transport is real. There is no inbox address and no
- * webhook secret configured on this install, so the row below is what a real
- * inbound message WOULD have produced; see the note at the end of `seed-demo`.
+ * The two entry points differ in what they do with it. `demo` writes the row
+ * below straight into `inbox_emails`. `send-email` sends the same fields to
+ * core's inbound webhook as a signed JSON payload and lets core build the row,
+ * so there the `id` and `messageId` fields below are only what this module
+ * proposed: the stored row is core's.
  */
 export type EnquiryInput = {
   emailId: string
@@ -51,6 +53,13 @@ export type EnquiryInput = {
   body?: string | null
   /** Subject line, written by the operator. Falls back to the built-in one. */
   subject?: string | null
+  /**
+   * Recipient address. On the `send-email` path this is the value that picks a
+   * tenant inside core's webhook, so it is the organization's configured inbox
+   * address; the default is only used by the offline `demo` path, which writes
+   * the row itself and resolves no inbox.
+   */
+  toAddress?: string | null
   now: Date
 }
 
@@ -118,7 +127,7 @@ export function buildEnquiryEmail(input: EnquiryInput): SeededEnquiry {
     messageId: `${input.messageIdPrefix}${input.now.getTime()}@localhost>`,
     forwardedByAddress: input.customerEmail,
     forwardedByName: input.customerName,
-    toAddress: 'ops@offer-automation.local',
+    toAddress: input.toAddress?.trim() || 'ops@offer-automation.local',
     subject: customSubject ?? DEFAULT_ENQUIRY_SUBJECT,
     replyTo: input.customerEmail,
     rawText,

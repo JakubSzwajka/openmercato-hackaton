@@ -40,6 +40,8 @@ export type SeedSummaryInput = {
   organizationId: string
   /** Base URL with no trailing slash. */
   baseUrl: string
+  /** Address `send-email` posts its signed webhook to. Picks this tenant. */
+  inboxAddress: string
   users: SeedSummaryUser[]
   /** The sales employee the deterministic `demo` path runs as. */
   salesUserId: string
@@ -90,6 +92,7 @@ export function buildSeedClosingLines(input: SeedSummaryInput): string[] {
     `tenantId         ${input.tenantId}`,
     `organizationId   ${input.organizationId}`,
     `organization     ${input.orgSlug}`,
+    `inbox address    ${input.inboxAddress}`,
     '',
     'Accounts (no password is printed: use the one you passed, or see `seed-demo --help`):',
     `  ${'email'.padEnd(34)} ${'access'.padEnd(14)} userId`,
@@ -100,20 +103,22 @@ export function buildSeedClosingLines(input: SeedSummaryInput): string[] {
     '',
     'No inbox email, no message thread, no proposal, no action, no quote and no',
     'notification exist here. The seed creates standing data only: the company, the',
-    'users, the freight catalogue and the CRM customers. The first enquiry in this',
-    'system is the one you send yourself.',
+    'users, the freight catalogue, the CRM customers and the inbox address above.',
+    'The first enquiry in this system is the one you send yourself.',
     '',
     'Send that first email (nothing else to fill in):',
     `  ${sendEmail}`,
     '',
-    'It writes one inbox email, emits `inbox_ops.email.received` and returns. What',
-    'follows is the subscribers reacting: extraction -> proposal -> priced draft',
-    'quote -> notification. That path needs an events worker (`yarn dev` spawns one)',
-    'and a model (`check-ai` says whether one is reachable).',
+    'It POSTs a signed webhook to core, the way a mail provider would. Core parses',
+    'the email, writes the row and emits `inbox_ops.email.received`. What follows is',
+    'the subscribers reacting: extraction -> proposal -> priced draft quote ->',
+    'notification. That path needs the dev server (the webhook is an HTTP endpoint),',
+    'an events worker (`yarn dev` spawns one) and a model (`check-ai` says whether',
+    'one is reachable).',
     '',
-    'No key, no worker, or you want the same result every time? `demo` is the',
-    'deterministic path and still there. It stubs the extraction and accepts the',
-    'action itself:',
+    'No key, no worker, no server, or you want the same result every time? `demo` is',
+    'the deterministic path and still there. It writes the email itself, stubs the',
+    'extraction and accepts the action:',
     '  yarn mercato offer_automation demo \\',
     `    --tenant ${input.tenantId} \\`,
     `    --org ${input.organizationId} \\`,
@@ -124,8 +129,10 @@ export function buildSeedClosingLines(input: SeedSummaryInput): string[] {
     '',
     'Note: rbacService caches role ACLs for 5 minutes in .mercato/cache/cache.db.',
     '      A feature granted just now can take that long to reach an open session.',
-    'Note: no inbox address or webhook secret was configured, so the real mail path',
-    '      is not wired. `send-email` fabricates the inbound email instead.',
+    'Note: `send-email` signs its POST with INBOX_OPS_WEBHOOK_SECRET. Set that in',
+    '      .env and restart the dev server, or core answers the webhook with 503.',
+    'Note: core deduplicates on subject + sender + body, per organization, forever.',
+    '      Sending the built-in enquiry twice is a silent no-op; vary it with --note.',
     rule,
     '',
   ]

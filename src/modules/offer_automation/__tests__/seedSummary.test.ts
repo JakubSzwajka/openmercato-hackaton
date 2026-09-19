@@ -11,6 +11,7 @@ const input = {
   tenantId: '6f7edd48-febc-485b-9e45-ea64773d62a5',
   organizationId: 'd8792480-8990-4b84-b533-4d9182d800b0',
   baseUrl: 'http://localhost:3000',
+  inboxAddress: 'quotes@nordwind-logistics.example',
   users: [
     {
       email: 'admin@nordwind-logistics.example',
@@ -70,6 +71,16 @@ describe('buildSeedClosingLines', () => {
     // The machine account is shown as unusable for login and named by feature.
     expect(rendered).toContain('<no login>')
     expect(rendered).toContain('offer_automation.offers.draft')
+  })
+
+  it('names the inbox address and what it needs to work', () => {
+    // The address is the only thing that routes the webhook to this tenant, and
+    // the secret is the only thing that gets it past core's 503. An operator who
+    // reads this block and still cannot send has been told neither.
+    const rendered = text()
+    expect(rendered).toContain(`inbox address    ${input.inboxAddress}`)
+    expect(rendered).toContain('INBOX_OPS_WEBHOOK_SECRET')
+    expect(rendered).toContain('deduplicates')
   })
 
   it('gives the copy-ready first-email command and keeps `demo` on the page', () => {

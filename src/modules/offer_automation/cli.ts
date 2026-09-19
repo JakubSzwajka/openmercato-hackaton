@@ -4,6 +4,7 @@ import type { AwilixContainer } from 'awilix'
 import type { ModuleCli } from '@open-mercato/shared/modules/registry'
 import { getCliModules } from '@open-mercato/shared/modules/registry'
 import { createRequestContainer } from '@open-mercato/shared/lib/di/container'
+import { findOneWithDecryption } from '@open-mercato/shared/lib/encryption/find'
 import { findAppRoot } from '@open-mercato/shared/lib/bootstrap/appResolver'
 import { Organization } from '@open-mercato/core/modules/directory/data/entities'
 import { User } from '@open-mercato/core/modules/auth/data/entities'
@@ -26,10 +27,31 @@ import { emitInboxOpsEvent } from '@open-mercato/core/modules/inbox_ops/events'
 import { executeAction } from '@open-mercato/core/modules/inbox_ops/lib/executionEngine'
 import { resolveOptionalEventBus } from '@open-mercato/core/modules/inbox_ops/lib/eventBus'
 import { enableInboxActionRegistryForCli } from './lib/cliInboxActionRegistry'
-import { createDemoMessageRecord, MESSAGE_AUDIENCE_FEATURE } from './lib/demoMessageRecord'
+import {
+  createDemoMessageRecord,
+  MESSAGE_AUDIENCE_FEATURE,
+  type SeededEmailForMessage,
+} from './lib/demoMessageRecord'
 import { listOfferOrigins } from './lib/offerOrigins'
 import { buildSeedClosingLines } from './lib/seedSummary'
 import { buildEnquiryEmail } from './lib/inboundEnquiry'
+import {
+  DEMO_INBOX_ADDRESS,
+  ensureDemoInbox,
+  findInboxForScope,
+  isInboxAddressActive,
+} from './lib/demoInbox'
+import {
+  decideWebhookOutcome,
+  describeWebhookOutcome,
+  INBOUND_WEBHOOK_PATH,
+  postInboundWebhook,
+  signWebhookRequest,
+  WEBHOOK_SECRET_ENV,
+  webhookContentHash,
+  type InboundWebhookPayload,
+} from './lib/inboxWebhook'
+import { POLL_INTERVAL_MS, sleep } from './lib/poll'
 import {
   deriveSenderIdentity,
   MAX_BODY_CHARS,
@@ -61,6 +83,12 @@ import {
   seedFreightServices,
   type FreightCatalogSeedResult,
 } from './lib/freightCatalog'
+import {
+  formatDemoResetLines,
+  isDemoResetRequested,
+  resolveDemoResetScope,
+  runDemoReset,
+} from './lib/demoReset'
 import {
   AUTOMATION_USER_EMAIL,
   ensureAutomationUser,
@@ -96,13 +124,14 @@ const USAGE = [
   '  yarn mercato offer_automation demo --tenant <tenantId> --org <organizationId> --auto-accept --user <userId>',
   '  yarn mercato offer_automation demo --tenant <tenantId> --org <organizationId> --live --auto-accept --user <userId>',
   '',
-  'THIS IS THE DETERMINISTIC COMMAND. It can stub the extraction, so it needs no',
-  'model, no API key and no queue worker, and it accepts the action itself with',
-  '--auto-accept instead of waiting for a subscriber. Use it when the network,',
-  'the key or the worker cannot be relied on.',
-  'The other one is `send-email`: it creates the email, emits the event and stops,',
-  'and everything after that happens because subscribers react. Use that one to',
-  'show the system working on its own.',
+  'THIS IS THE DETERMINISTIC COMMAND. It writes the inbox email itself and can',
+  'stub the extraction, so it needs no server, no model, no API key and no queue',
+  'worker, and it accepts the action itself with --auto-accept instead of waiting',
+  'for a subscriber. Use it when the network, the key or the worker cannot be',
+  'relied on.',
+  'The other one is `send-email`: it POSTs a signed webhook to the running app,',
+  'core writes the email and emits the event, and everything after that happens',
+  'because subscribers react. Use that one to show the system working on its own.',
   '',
   'Seeds the transport services in the catalogue (idempotent, see `seed-catalog`),',
   'then the inbound artefacts a real customer email would have produced (one inbox',
@@ -1008,6 +1037,7 @@ const seedCatalog: ModuleCli = {
 const SEED_DEMO_USAGE = [
   'Usage:',
   '  yarn mercato offer_automation seed-demo',
+  '  yarn mercato offer_automation seed-demo --reset',
   '  yarn mercato offer_automation seed-demo --password "S3cret!"',
   '  yarn mercato offer_automation seed-demo --org-slug throwaway-freight --admin-email admin@throwaway.example',
   '',
@@ -1020,10 +1050,21 @@ const SEED_DEMO_USAGE = [
   'action, no quote and no notification. The first enquiry in the system is the',
   'one you send yourself:  yarn mercato offer_automation send-email',
   '',
-  'Idempotent. Every step creates what is missing and skips what exists; nothing',
-  'is ever deleted, and no other tenant is touched.',
+  'Idempotent. Every step creates what is missing and skips what exists, and no',
+  'other tenant is touched. Without --reset nothing is ever deleted.',
   '',
   'Flags:',
+  '  --reset                 Delete this organization\'s ACTIVITY first, as step',
+  '                          0/8: inbound emails, the message thread, proposals,',
+  '                          actions, drafted quotes and notifications. The',
+  '                          company survives. Tenant, organization, roles,',
+  '                          users, the automation account, feature grants,',
+  '                          currencies, sales statuses, the sales channel, the',
+  '                          freight catalogue and the three freight customers',
+  '                          are all left exactly as they are, and the seed then',
+  '                          runs unchanged. Scoped to the --org-slug tenant AND',
+  '                          organization; refuses if either cannot be resolved.',
+  '                          Off by default.',
   '  --password <value>      Password for both seeded users.',
   '  --admin-password <value>  Overrides --password for the admin.',
   '  --sales-password <value>  Overrides --password for the sales employee.',
@@ -1184,8 +1225,34 @@ const seedDemo: ModuleCli = {
 
     const container = (await createRequestContainer()) as unknown as AwilixContainer
 
+    // Step zero, and the only destructive thing this command can do. Opt-in,
+    // off by default, and it runs BEFORE the tenant step so the seed that
+    // follows is the same create-if-missing run it always was. The scope comes
+    // from the slug the seed is idempotent on, never from a flag pair the
+    // operator typed, and `runDemoReset` refuses in a production-like
+    // environment through the same guard the seed's writes use.
+    if (isDemoResetRequested(args)) {
+      console.log('')
+      console.log(`0/8  Reset (org ${orgSlug})`)
+      const resetEm = (container.resolve('em') as EntityManager).fork()
+      let target: Awaited<ReturnType<typeof resolveDemoResetScope>>
+      try {
+        target = await resolveDemoResetScope(resetEm, orgSlug)
+      } catch (err) {
+        fail((err as Error).message, 'Name the company to reset with --org-slug <slug>.')
+      }
+      if (!target) {
+        // The ordinary first run: no company, so no activity. Nothing is
+        // deleted and the seed below builds it.
+        console.log(`  no organization with slug "${orgSlug}"; nothing to delete`)
+      } else {
+        const reset = await runDemoReset(container, target)
+        for (const line of formatDemoResetLines(reset)) console.log(line)
+      }
+    }
+
     console.log('')
-    console.log(`1/7  Tenant and organization ("${orgName}", slug ${orgSlug})`)
+    console.log(`1/8  Tenant and organization ("${orgName}", slug ${orgSlug})`)
     const tenant = await ensureDemoTenant(container, { adminEmail, adminPassword, orgSlug, orgName })
     const scopeIds = { tenantId: tenant.tenantId, organizationId: tenant.organizationId }
     console.log(`  tenantId       ${tenant.tenantId}`)
@@ -1193,7 +1260,7 @@ const seedDemo: ModuleCli = {
     console.log(`  ${tenant.created ? 'created by this run' : 'already present; reused'}`)
 
     console.log('')
-    console.log('2/7  Roles and users')
+    console.log('2/8  Roles and users')
     console.log(`  ${'email'.padEnd(34)} ${'access'.padEnd(14)} userId`)
     await runModuleCli('auth', 'seed-roles', ['--tenant', tenant.tenantId])
     const users = await ensureDemoUsers(
@@ -1214,7 +1281,7 @@ const seedDemo: ModuleCli = {
     printAutomationUser(automationUser)
 
     console.log('')
-    console.log('3/7  Core seeds (currency, catalogue basics, sales prerequisites, CRM dictionaries)')
+    console.log('3/8  Core seeds (currency, catalogue basics, sales prerequisites, CRM dictionaries)')
     for (const step of CORE_SEED_STEPS) {
       const stepArgs =
         step.scope === 'tenant'
@@ -1224,24 +1291,24 @@ const seedDemo: ModuleCli = {
     }
 
     console.log('')
-    console.log('4/7  Feature grants')
+    console.log('4/8  Feature grants')
     await runModuleCli('auth', 'sync-role-acls', ['--tenant', tenant.tenantId])
     console.log(`  employee role now holds ${DRAFT_OFFER_REQUIRED_FEATURE} and ${MESSAGE_AUDIENCE_FEATURE}`)
 
     console.log('')
-    console.log('5/7  Sales channel')
+    console.log('5/8  Sales channel')
     const channel = await ensureSalesChannel(container, scope)
     console.log(
       `  ${channel.name} (${channel.channelId}) ${channel.created ? 'created' : 'already present'}`,
     )
 
     console.log('')
-    console.log('6/7  Freight catalogue')
+    console.log('6/8  Freight catalogue')
     const catalog = await seedFreightServices(container, scope)
     printCatalogSummary(catalog)
 
     console.log('')
-    console.log('7/7  Freight customers')
+    console.log('7/8  Freight customers')
     const customers = await seedDemoCustomers(container, scope)
     for (const row of customers.rows) {
       const what = [row.created.company ? 'company' : null, row.created.contact ? 'contact' : null]
@@ -1254,6 +1321,18 @@ const seedDemo: ModuleCli = {
       console.log(`  ${''.padEnd(26)} contact entity ${row.contactEntityId}  company entity ${row.companyEntityId}`)
     }
     console.log(`  ${customers.createdCount} row(s) created by this run.`)
+
+    console.log('')
+    console.log('8/8  Inbound mailbox')
+    // The address `send-email` posts to. It is what picks this tenant inside
+    // core's webhook, so without this row the webhook answers 200 and silently
+    // drops the email.
+    const inbox = await ensureDemoInbox(container, scopeIds)
+    console.log(`  ${inbox.inboxAddress.padEnd(40)} ${inbox.state}`)
+    if (inbox.previousAddress) {
+      console.log(`  ${''.padEnd(40)} was ${inbox.previousAddress}, written by core's inbox_ops setup hook`)
+    }
+    console.log(`  ${''.padEnd(40)} settings row ${inbox.settingsId}, signed with ${WEBHOOK_SECRET_ENV}`)
 
     // Both prerequisites are verified in the new tenant before the run can
     // report success. Either one missing turns the accepted offer into a
@@ -1296,6 +1375,7 @@ const seedDemo: ModuleCli = {
       tenantId: tenant.tenantId,
       organizationId: tenant.organizationId,
       baseUrl: baseUrl(),
+      inboxAddress: inbox.inboxAddress,
       users: [
         ...users.map((user) => ({
           email: user.email,
@@ -1443,11 +1523,21 @@ const SEND_EMAIL_USAGE = [
   '  yarn mercato offer_automation send-email --subject "Quote please" --body "3 pallets Poznan to Hamburg, no dock."',
   '  yarn mercato offer_automation send-email --body-file ./enquiry.txt',
   '',
-  'Simulates ONE inbound customer email and stops. It writes the inbox email and',
-  'the messages thread, emits the persistent `inbox_ops.email.received` event the',
-  'inbound webhook emits, and returns. It creates no proposal, executes no action',
-  'and takes no --user: everything after the event happens because subscribers',
-  'react to it.',
+  'Delivers ONE inbound customer email and stops. It signs a JSON payload and',
+  `POSTs it to ${INBOUND_WEBHOOK_PATH} — the same endpoint a real`,
+  'mail provider calls. CORE does the rest: it parses the email, deduplicates it,',
+  'writes the `inbox_emails` row and emits the persistent',
+  '`inbox_ops.email.received` event. This command creates no proposal, executes no',
+  'action and takes no --user.',
+  '',
+  'It therefore needs two things the offline `demo` command does not:',
+  `  - a running server at ${'${APP_URL}'} (default http://localhost:3000), and`,
+  `  - ${WEBHOOK_SECRET_ENV} set in .env, which is the HMAC key it signs with.`,
+  '    The SERVER reads the same variable, so add it once and restart `yarn dev`.',
+  '',
+  'The recipient address is the organization\'s configured inbox, written by',
+  '`seed-demo`. That address is what picks the tenant inside core: nothing in the',
+  'payload can override it.',
   '',
   'What reacts, in order:',
   '  1. an events worker picks the job up (`yarn dev` spawns one automatically),',
@@ -1458,8 +1548,9 @@ const SEND_EMAIL_USAGE = [
   '',
   '`demo` is the other command and the deterministic one: it can stub the',
   'extraction, needs no model and no worker, and accepts the action itself with',
-  '--auto-accept. Use `demo` when there is no API key or no queue worker; use',
-  '`send-email` to show the system reacting on its own.',
+  '--auto-accept. It also writes the inbox email itself instead of POSTing it, so',
+  'it needs no server and no webhook secret. Use `demo` when any of those is',
+  'missing; use `send-email` to show the system reacting on its own.',
   '',
   'Flags:',
   '  --tenant <uuid>   Defaults to the tenant of the seeded logistics company.',
@@ -1479,7 +1570,10 @@ const SEND_EMAIL_USAGE = [
   '                    built-in enquiry rather than being added to it, so the',
   '                    extraction reads only your job. Ask for something the four',
   '                    seeded services cannot cover and the action ends `failed`',
-  '                    with no quote, which is the refusal path.',
+  '                    with no quote, which is the refusal path. It also makes the',
+  '                    email unique, which matters: core deduplicates on subject +',
+  '                    sender + body, per organization, with no time window, so the',
+  '                    built-in enquiry can only be delivered here once.',
   '  --body-file <path>  The same, read from a file, so a long multi-paragraph',
   '                    email does not have to survive shell quoting. Mutually',
   '                    exclusive with --body.',
@@ -1491,7 +1585,7 @@ const SEND_EMAIL_USAGE = [
   '                    catalogue has no price in, the action ends `failed`, NO',
   '                    quote is created and an error notification goes to the',
   '                    desk waiting for the quote.',
-  '  --no-watch        Emit and exit. By default the command watches the rows',
+  '  --no-watch        Deliver and exit. By default the command watches the rows',
   '                    the subscribers write and prints them; the watch is',
   '                    READ-ONLY and changes nothing.',
   '  --watch-timeout <ms>  How long to watch. Default 60000.',
@@ -1503,8 +1597,107 @@ const SEND_EMAIL_USAGE = [
   '                    is the event the executor listens to.',
 ].join('\n')
 
-/** Message-ID prefix for emails this command fabricates. */
+/**
+ * Message-ID prefix for emails this command sends.
+ *
+ * It is also how the command finds the row afterwards. Core's webhook answers
+ * `200 {"ok":true}` whether it stored the email or dropped it, and it assigns
+ * the row id itself, so the message id we put in the payload is the only handle
+ * we keep on the other side of the POST.
+ */
 const SENT_MESSAGE_ID_PREFIX = '<offer-automation-send-'
+
+/** How long to wait for the row core writes, after a 200. */
+const WEBHOOK_ROW_TIMEOUT_MS = 5000
+
+/**
+ * Waits for the row core's webhook writes, found by the message id we sent.
+ *
+ * Forked and cleared on every read because the row is written by ANOTHER
+ * process (the dev server), so a cached identity map would keep reporting the
+ * first miss. `message_id` is one of the columns core deliberately leaves
+ * unencrypted, so it can be used in a WHERE clause.
+ *
+ * Returns null when the window closes with nothing stored. That is not an
+ * error by itself: it is the input to `decideWebhookOutcome`.
+ */
+async function awaitStoredEmail(
+  container: AwilixContainer,
+  messageId: string,
+  scope: { tenantId: string; organizationId: string },
+  timeoutMs: number,
+): Promise<string | null> {
+  const startedAt = Date.now()
+  for (;;) {
+    const em = (container.resolve('em') as EntityManager).fork({ clear: true })
+    const row = (await em.findOne(InboxEmail, {
+      messageId,
+      ...scope,
+      deletedAt: null,
+    } as never)) as { id: string } | null
+    if (row) return row.id
+    if (Date.now() - startedAt >= timeoutMs) return null
+    await sleep(POLL_INTERVAL_MS)
+  }
+}
+
+/**
+ * The email core already held under this content hash, if any.
+ *
+ * `content_hash` is unencrypted for exactly this reason: it is core's own
+ * deduplication key, matched per tenant and organization with no time window.
+ */
+async function findEmailIdByContentHash(
+  em: EntityManager,
+  contentHash: string,
+  scope: { tenantId: string; organizationId: string },
+): Promise<string | null> {
+  const row = (await em.findOne(InboxEmail, {
+    contentHash,
+    ...scope,
+    deletedAt: null,
+  } as never)) as { id: string } | null
+  return row?.id ?? null
+}
+
+/**
+ * Core's stored email, decrypted, in the shape the messages leg needs.
+ *
+ * Subject and body are encrypted at rest, so a plain find would hand the
+ * message record ciphertext. Read through core's own decrypting helper instead.
+ */
+async function readStoredEmail(
+  container: AwilixContainer,
+  inboxEmailId: string,
+  scope: { tenantId: string; organizationId: string },
+): Promise<SeededEmailForMessage | null> {
+  const em = (container.resolve('em') as EntityManager).fork({ clear: true })
+  const row = (await findOneWithDecryption(
+    em,
+    InboxEmail,
+    { id: inboxEmailId, ...scope } as never,
+    undefined,
+    scope,
+  )) as {
+    id: string
+    subject?: string | null
+    cleanedText?: string | null
+    rawText?: string | null
+    forwardedByAddress?: string | null
+    forwardedByName?: string | null
+    status?: string | null
+  } | null
+  if (!row) return null
+  return {
+    id: row.id,
+    subject: row.subject ?? '(no subject)',
+    cleanedText: row.cleanedText ?? null,
+    rawText: row.rawText ?? null,
+    forwardedByAddress: row.forwardedByAddress ?? '',
+    forwardedByName: row.forwardedByName ?? null,
+    status: row.status ?? 'received',
+  }
+}
 
 /**
  * Reads what the subscribers have written so far. Writes nothing, ever.
@@ -1787,6 +1980,40 @@ const sendEmail: ModuleCli = {
       return
     }
 
+    // Two more preflights, still before anything leaves this process. Both
+    // failures are one line to fix and painful to diagnose afterwards: one
+    // comes back as a 503 from the server, the other as a 200 that stored
+    // nothing.
+    const webhookSecret = process.env[WEBHOOK_SECRET_ENV]?.trim()
+    if (!webhookSecret) {
+      fail(
+        `${WEBHOOK_SECRET_ENV} is not set, so this command cannot sign the webhook and the server would answer 503.`,
+        'Add one line to .env. Any long random string will do, and the value is',
+        'never printed by this command:',
+        `  ${WEBHOOK_SECRET_ENV}=<a long random string>`,
+        'The SERVER reads the same variable, so restart `yarn dev` after adding it.',
+        'Nothing was written.',
+      )
+    }
+
+    // The address decides the tenant. Core's webhook resolves the recipient to
+    // one `inbox_settings` row and takes the tenant and organization off THAT
+    // row, ignoring anything else in the payload. So the address is read from
+    // the scope this command already validated, never hardcoded: sending to a
+    // fixed address would deliver into whichever organization owns it.
+    const inbox = await findInboxForScope(em.fork(), scope)
+    if (!inbox || !inbox.isActive) {
+      fail(
+        `No active inbox address is configured for organization ${organizationId}; core's webhook would answer 200 and drop the email.`,
+        'The recipient address is what picks the tenant, so it is not optional.',
+        'Write it (idempotent, creates nothing else that already exists):',
+        '  yarn mercato offer_automation seed-demo',
+        `The demo company uses ${DEMO_INBOX_ADDRESS}.`,
+        'Nothing was written.',
+      )
+    }
+    const toAddress = inbox!.inboxAddress
+
     const contact = primaryDemoContact()
     const customerEmail = overrides.from ?? contact.contact.primaryEmail
     // A sender the operator typed gets a name read off their own address. The
@@ -1806,6 +2033,8 @@ const sendEmail: ModuleCli = {
       derived?.contactName ??
       `${contact.contact.firstName} ${contact.contact.lastName}`
 
+    // `emailId` is this module's proposal only. Core's webhook assigns the row
+    // id itself, so the id that ends up in `inbox_emails` is read back below.
     const emailId = randomUUID()
     const seededEmail = buildEnquiryEmail({
       emailId,
@@ -1815,7 +2044,10 @@ const sendEmail: ModuleCli = {
       contactName,
       tenantId,
       organizationId,
-      // The status every extractor's optimistic claim looks for.
+      toAddress,
+      // The status every extractor's optimistic claim looks for. Core sets it
+      // itself on this path; it is still passed so the two commands build one
+      // email and not two.
       status: 'received',
       seededBy: 'offer_automation send-email',
       extraNote: readFlag(args, 'note'),
@@ -1824,30 +2056,107 @@ const sendEmail: ModuleCli = {
       now: new Date(),
     })
 
-    // Asked before the write so the answer can be printed next to the sender,
+    // Asked before the POST so the answer can be printed next to the sender,
     // which is the only place an operator will connect the two.
     const crmLink = await preflightCrmLink(container, em.fork(), scope, customerEmail)
 
-    em.persist(em.create(InboxEmail, seededEmail))
-    await em.flush()
+    // The handoff. This is a real HTTP call to the endpoint a mail provider
+    // would call, signed with the same HMAC scheme core verifies. Everything
+    // after it — parsing, deduplication, the `inbox_emails` row and the
+    // persistent `inbox_ops.email.received` event — is core's own code, which
+    // is the point: nothing here fakes a step of the inbound path.
+    const payload: InboundWebhookPayload = {
+      from: `${customerName} <${customerEmail}>`,
+      to: toAddress,
+      subject: seededEmail.subject,
+      text: seededEmail.rawText,
+      messageId: seededEmail.messageId,
+      replyTo: seededEmail.replyTo,
+    }
+    const webhookUrl = `${baseUrl()}${INBOUND_WEBHOOK_PATH}`
+    const posted = await postInboundWebhook({
+      url: webhookUrl,
+      signed: signWebhookRequest({ payload, secret: webhookSecret!, now: new Date() }),
+    })
+
+    if (!posted.ok && posted.kind === 'unreachable') {
+      fail(
+        `Could not reach ${webhookUrl}: ${posted.detail}`,
+        'Nothing was written, in any tenant.',
+        `This command delivers over HTTP, so the app has to be running at ${baseUrl()}`,
+        '(set APP_URL to point somewhere else). Start it with:',
+        '  yarn dev',
+        'Or run the offline path, which writes the email itself and needs no server:',
+        `  yarn mercato offer_automation demo --tenant ${tenantId} --org ${organizationId}`,
+      )
+    }
+    if (!posted.ok) {
+      fail(
+        `The inbound webhook refused the request: HTTP ${posted.status}.`,
+        `  response body: ${posted.body || '<empty>'}`,
+        'Nothing was written, in any tenant.',
+        posted.status === 503
+          ? `503 means the SERVER has no ${WEBHOOK_SECRET_ENV}. Add it to .env and restart \`yarn dev\`.`
+          : posted.status === 400
+            ? 'A 400 here is a signature or timestamp rejection. Check that this machine'
+              + " and the server agree on the time to within five minutes, and that both read the same .env."
+            : 'See the dev-server log for the inbox_ops webhook.',
+      )
+    }
+
+    // Core answers `200 {"ok":true}` for a stored email, for an unknown
+    // recipient AND for a duplicate, so the 200 above proves nothing. The row
+    // is read back by the message id we sent, which is the only handle that
+    // survives the POST.
+    const storedInboxEmailId = await awaitStoredEmail(
+      container,
+      seededEmail.messageId,
+      scope,
+      WEBHOOK_ROW_TIMEOUT_MS,
+    )
+    if (!storedInboxEmailId) {
+      const probeEm = (container.resolve('em') as EntityManager).fork({ clear: true })
+      const outcome = decideWebhookOutcome({
+        storedInboxEmailId: null,
+        duplicateInboxEmailId: await findEmailIdByContentHash(
+          probeEm,
+          webhookContentHash(payload),
+          scope,
+        ),
+        inboxSettingsPresent: await isInboxAddressActive(probeEm, toAddress),
+      })
+      console.error('')
+      console.error('=============================================================================')
+      console.error('THE WEBHOOK ANSWERED 200 AND NO EMAIL WAS STORED.')
+      console.error('=============================================================================')
+      for (const line of describeWebhookOutcome(outcome, {
+        toAddress,
+        tenantId,
+        organizationId,
+        messageId: seededEmail.messageId,
+      })) {
+        console.error(line)
+      }
+      console.error('')
+      fail(`No inbox email was stored for ${toAddress} (outcome: ${outcome.kind}).`)
+    }
+
+    // Read core's own row. Its text has been through core's parser, so the
+    // thread on /backend/messages says what the stored email says rather than
+    // what this command typed. The fields below are encrypted at rest, hence
+    // the decrypting read.
+    const storedEmail = await readStoredEmail(container, storedInboxEmailId!, scope)
+    if (!storedEmail) {
+      fail(
+        `Inbox email ${storedInboxEmailId} vanished between two reads; refusing to write a message record for it.`,
+      )
+    }
 
     // Core's extraction worker writes this record itself, but only after a
     // SUCCESSFUL extraction (`extractionWorker.ts` step 8c), and on this install
     // it never gets that far. Writing it here is what puts the thread on
     // /backend/messages whichever extractor ends up winning.
-    const message = await createDemoMessageRecord(
-      container,
-      {
-        id: seededEmail.id,
-        subject: seededEmail.subject,
-        cleanedText: seededEmail.cleanedText,
-        rawText: seededEmail.rawText,
-        forwardedByAddress: seededEmail.forwardedByAddress,
-        forwardedByName: seededEmail.forwardedByName,
-        status: seededEmail.status,
-      },
-      scope,
-    )
+    const message = await createDemoMessageRecord(container, storedEmail!, scope)
     if (!message.ok) {
       // Loud on purpose. The operator's next move is to open /backend/messages
       // and look for a row, and without this banner they would spend that search
@@ -1857,11 +2166,11 @@ const sendEmail: ModuleCli = {
       console.error('NO MESSAGES ROW WAS WRITTEN. Nothing will appear at /backend/messages,')
       console.error('in any tenant, for any login. Do not go looking for it.')
       console.error('=============================================================================')
-      console.error(`  inboxEmailId:    ${emailId}  (this row WAS written)`)
+      console.error(`  inboxEmailId:    ${storedInboxEmailId}  (core DID store this row)`)
       console.error(`  reason:          ${message.reason}`)
       console.error('')
       fail(
-        `Wrote the inbox email but could not create its message record: ${message.reason}`,
+        `Core stored the inbox email, but its message record could not be created: ${message.reason}`,
         ...message.hints,
       )
     }
@@ -1876,29 +2185,19 @@ const sendEmail: ModuleCli = {
       tenantId,
     })
 
-    // The handoff. Byte for byte the emit the inbound webhook makes
-    // (`inbox_ops/api/webhook/inbound.ts:393`): persistent, so it is queued and
-    // drained by an events worker, in another process, with retry and
-    // dead-lettering. Nothing below this line touches the business flow.
-    await emitInboxOpsEvent(
-      'inbox_ops.email.received',
-      {
-        emailId,
-        tenantId,
-        organizationId,
-        forwardedByAddress: seededEmail.forwardedByAddress,
-        subject: seededEmail.subject,
-      },
-      { persistent: true, tenantId, organizationId },
-    )
+    // Nothing below this line touches the business flow. The persistent
+    // `inbox_ops.email.received` event was emitted by core's webhook, inside
+    // the request above, and is being drained by an events worker in another
+    // process with retry and dead-lettering.
 
     const bodyLines = previewBody(seededEmail.rawText)
 
     console.log('')
-    console.log('Inbound email created and handed to the event bus.')
+    console.log('Inbound email delivered to core\'s webhook, parsed and stored.')
     console.log('')
     console.log('This is what was sent:')
     console.log(`  from:            ${customerEmail} (${customerName})`)
+    console.log(`  to:              ${toAddress}`)
     console.log(`  subject:         ${seededEmail.subject}`)
     console.log(`  body:            ${bodyLines[0] ?? ''}`)
     for (const line of bodyLines.slice(1)) console.log(`                   ${line}`)
@@ -1923,7 +2222,7 @@ const sendEmail: ModuleCli = {
     console.log('Rows written:')
     console.log(`  tenantId:        ${tenantId}`)
     console.log(`  organizationId:  ${organizationId}`)
-    console.log(`  inboxEmailId:    ${emailId}`)
+    console.log(`  inboxEmailId:    ${storedInboxEmailId}  (written by core, not by this command)`)
     console.log(`  messageId:       ${message.messageId}`)
     console.log(`  threadId:        ${thread.threadId ?? '<none: core created no thread>'}`)
     console.log(`  addressed to:    ${thread.recipients.length} user(s)`)
@@ -1931,7 +2230,8 @@ const sendEmail: ModuleCli = {
       console.log(`                   ${recipient.email}  (${recipient.userId})`)
     }
     console.log(`  sender shown as: ${thread.senderEmail ?? message.senderUserId}`)
-    console.log('  event:           inbox_ops.email.received (persistent)')
+    console.log(`  webhook:         POST ${webhookUrl} -> ${posted.status}`)
+    console.log('  event:           inbox_ops.email.received (persistent, emitted by core)')
     console.log(`  will act as:     ${AUTOMATION_USER_EMAIL} (${automationUserId})`)
     console.log('')
     console.log('Where to read it:')
@@ -1954,10 +2254,10 @@ const sendEmail: ModuleCli = {
     console.log(`Watching the rows the subscribers write (read-only, up to ${Math.round(watchTimeoutMs / 1000)}s)...`)
 
     const startedAt = Date.now()
-    let state = await readWatchState(container, emailId, scope)
+    let state = await readWatchState(container, storedInboxEmailId!, scope)
     while (!watchSettled(state) && Date.now() - startedAt < watchTimeoutMs) {
-      await new Promise((resolve) => setTimeout(resolve, 750))
-      state = await readWatchState(container, emailId, scope)
+      await sleep(POLL_INTERVAL_MS)
+      state = await readWatchState(container, storedInboxEmailId!, scope)
     }
     const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
 
