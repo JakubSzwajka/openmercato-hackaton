@@ -154,6 +154,10 @@ export const enabledModules: ModuleEntry[] = [
   { id: 'customer_accounts', from: '@open-mercato/core' },
   { id: 'portal', from: '@open-mercato/core' },
   { id: 'ratelimit_probe', from: '@app' },
+  // App-owned proof that `inbox-actions.ts` discovery injects a custom action
+  // into the generated inbox-action registry and that the inbox_ops execution
+  // engine runs it on human accept. No LLM, no webhook, no new entity.
+  { id: 'offer_automation', from: '@app' },
 ]
 
 // Official modules activated via official-modules.json / official-modules.local.json
