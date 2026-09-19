@@ -303,12 +303,14 @@ TODO: Fix that latter to have reference by the package names
      Consumed by the `body[data-demo-feedback-fab]` safe-area rule below.
      Pure spacing — theme-invariant (no .dark override). */
   --om-floating-cta-safe-area: 5rem;
-  /* Brand lime + yellow — theme-invariant (no .dark override). Brand violet is themed (see below + .dark). */
-  --brand-lime: #B4F372;
-  /* Brand yellow — mid stop of the OM brand gradient (lime -> yellow -> violet), theme-invariant. */
-  --brand-yellow: #EEFB63;
-  /* Foreground for text/icons placed on the brand-lime surface — dark, theme-invariant (the lime stays light in both themes). */
-  --brand-lime-foreground: #1f2a12;
+  /* OpenLogistic "Airside" brand accents. The three token names are the
+     platform's originals; the values are the hi-vis trio. Theme-invariant
+     (no .dark override) except brand-violet, which is themed below. */
+  --brand-lime: #F5D90A;
+  /* Mid stop of the brand gradient (hi-vis yellow -> amber -> signal orange). */
+  --brand-yellow: #FFB000;
+  /* Foreground for text/icons on the brand-lime surface. Contrast 13.8:1. */
+  --brand-lime-foreground: #2A2200;
   /* Focus ring tokens (Figma dual-shadow spec — opt-in via .focus-ring-fancy) */
   --focus-ring-inner: rgba(255, 255, 255, 1);
   --focus-ring-outer: rgba(153, 160, 174, 0.16);
@@ -328,12 +330,13 @@ TODO: Fix that latter to have reference by the package names
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --brand-violet: #BC9AFF;
-  --brand-violet-soft: oklch(0.95 0.03 293);
+  /* OpenLogistic "Airside" primary. White on primary 5.18:1, on hover 7.31:1. */
+  --primary: #C2410C;
+  --primary-foreground: #FFFFFF;
+  --brand-violet: #FF6A1F;
+  --brand-violet-soft: #FFEDE3;
   --brand-violet-foreground: #0C0C0C;
-  --primary-hover: oklch(0.145 0 0);
+  --primary-hover: #9A3412;
   /* Accent indigo — used for selection controls (checkbox, radio, switch) */
   /* Figma file-format category colors, identical in both themes. */
   --badge-yellow-solid: #f6b51e;
@@ -395,7 +398,7 @@ TODO: Fix that latter to have reference by the package names
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: #C2410C;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -414,8 +417,8 @@ TODO: Fix that latter to have reference by the package names
   --chart-orange: oklch(0.705 0.213 47.604);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: #C2410C;
+  --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
@@ -543,12 +546,13 @@ TODO: Fix that latter to have reference by the package names
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --brand-violet: #BC9AFF;
-  --brand-violet-soft: oklch(0.3 0.06 293);
+  /* Airside, dark. Ink on primary 8.64:1, on hover 6.98:1. */
+  --primary: #FB923C;
+  --primary-foreground: #0C0C0C;
+  --brand-violet: #FF8A4C;
+  --brand-violet-soft: #40200E;
   --brand-violet-foreground: #0C0C0C;
-  --primary-hover: oklch(0.85 0 0);
+  --primary-hover: #F97316;
   /* Accent indigo — slightly lighter in dark mode for contrast */
   --badge-yellow-solid: #e6a819;
   --badge-yellow-solid-foreground: #171717;
@@ -590,7 +594,7 @@ TODO: Fix that latter to have reference by the package names
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: #FB923C;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -609,8 +613,8 @@ TODO: Fix that latter to have reference by the package names
   --chart-orange: oklch(0.792 0.184 56.043);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: #FB923C;
+  --sidebar-primary-foreground: #0C0C0C;
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
