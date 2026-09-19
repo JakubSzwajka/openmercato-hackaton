@@ -117,7 +117,38 @@ export const enabledModules: ModuleEntry[] = [
   // OM_ENABLE_ENTERPRISE_MODULES + OM_ENABLE_ENTERPRISE_MODULES_AGENTS.
   { id: 'translations', from: '@open-mercato/core' },
   { id: 'scheduler', from: '@open-mercato/scheduler' },
-  { id: 'inbox_ops', from: '@open-mercato/core' },
+  {
+    id: 'inbox_ops',
+    from: '@open-mercato/core',
+    overrides: {
+      routes: {
+        pages: {
+          // Replaces the loader on core's own route-manifest entry for the
+          // proposal detail page, keeping its URL, ACL features, breadcrumb and
+          // title untouched (`applyPageOverridesToManifests` in
+          // `@open-mercato/shared/src/modules/overrides.ts` swaps `load` and
+          // merges nothing else when `metadata` is absent).
+          //
+          // Why a replacement and not a widget: `inbox_ops` publishes no UI
+          // injection spot and no component handle on this page. A `page:`
+          // component override is not usable either — `registerComponentOverrides`
+          // runs from a client provider while the backend catch-all resolves
+          // `page:` handles during the RSC pass
+          // (`src/modules/example/references/surface-map.md:184`).
+          //
+          // The app page deliberately does NOT live under
+          // `src/modules/offer_automation/backend/inbox-ops/**`: a `page.tsx`
+          // there would generate a second manifest entry for the same URL.
+          'backend:/backend/inbox-ops/proposals/[id]': {
+            load: async () => {
+              const mod = await import('./modules/offer_automation/components/inbox-ops/ProposalDetailPage')
+              return (mod.default ?? mod) as never
+            },
+          },
+        },
+      },
+    },
+  },
   { id: 'payment_gateways', from: '@open-mercato/core' },
   { id: 'checkout', from: '@open-mercato/checkout' },
   { id: 'documents', from: '@open-mercato/documents' },
