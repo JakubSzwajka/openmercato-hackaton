@@ -1,0 +1,67 @@
+# staff — Contribution resolutions
+
+[Back to module index](index.md)
+
+## Contribution resolutions
+
+| Contribution | Target | Resolution | Activations | Source |
+|---|---|---|---|---|
+| ai:staff.draft_client_report | module:staff.draft_client_report | capability-only | — | [ai-tools/time-tracking-pack.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/ai-tools/time-tracking-pack.ts) |
+| ai:staff.find_missing_days | module:staff.find_missing_days | capability-only | — | [ai-tools/time-tracking-pack.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/ai-tools/time-tracking-pack.ts) |
+| ai:staff.log_time | module:staff.log_time | capability-only | — | [ai-tools/time-tracking-pack.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/ai-tools/time-tracking-pack.ts) |
+| ai:staff.start_timer | module:staff.start_timer | capability-only | — | [ai-tools/time-tracking-pack.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/ai-tools/time-tracking-pack.ts) |
+| ai:staff.stop_timer | module:staff.stop_timer | capability-only | — | [ai-tools/time-tracking-pack.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/ai-tools/time-tracking-pack.ts) |
+| ai:staff.summarize_week | module:staff.summarize_week | capability-only | — | [ai-tools/time-tracking-pack.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/ai-tools/time-tracking-pack.ts) |
+| ai:staff.time_tracking_assistant | module:staff.time_tracking_assistant | capability-only | — | [ai-agents.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/ai-agents.ts) |
+| dashboard:staff.timesheets.hoursByProject | widget-spot:dashboard:staff.timesheets.hoursByProject | bound | widget-spot:dashboard:staff.timesheets.hoursByProject:dashboard-host-consumer | [widgets/dashboard/timesheets-hours-by-project/widget.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/widgets/dashboard/timesheets-hours-by-project/widget.ts) |
+| dashboard:staff.timesheets.timeReporting | widget-spot:dashboard:staff.timesheets.timeReporting | bound | widget-spot:dashboard:staff.timesheets.timeReporting:dashboard-host-consumer | [widgets/dashboard/timesheets-time-reporting/widget.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/widgets/dashboard/timesheets-time-reporting/widget.ts) |
+| notification:staff.leave_request.approved | module:staff.leave_request.approved | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.leave_request.pending | module:staff.leave_request.pending | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.leave_request.rejected | module:staff.leave_request.rejected | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.timesheets.project_access.requested | module:staff.timesheets.project_access.requested @staff | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.timesheets.time_entry.timer_running_long | module:staff.timesheets.time_entry.timer_running_long | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.timesheets.time_project.budget_threshold_reached | module:staff.timesheets.time_project.budget_threshold_reached @staff | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.timesheets.time_report.approved | module:staff.timesheets.time_report.approved | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.timesheets.time_report.ready_for_approval | module:staff.timesheets.time_report.ready_for_approval | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| notification:staff.timesheets.timesheet.period_incomplete | module:staff.timesheets.timesheet.period_incomplete | capability-only | — | [notifications.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.ts) |
+| search:staff:staff_team_member | module:staff:staff_team_member @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| search:staff:staff_team_role | module:staff:staff_team_role @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| search:staff:staff_team | module:staff:staff_team @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| search:staff:staff_time_entry | module:staff:staff_time_entry @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| search:staff:staff_time_project | module:staff:staff_time_project @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| search:staff:staff_time_report | module:staff:staff_time_report @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| search:staff:staff_time_tag | module:staff:staff_time_tag @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| search:staff:staff_time_task | module:staff:staff_time_task @staff | capability-only | — | [search.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/search.ts) |
+| staff:time-project-access-requested-notification | event:staff.timesheets.project_access.requested @staff | capability-only | — | [subscribers/time-project-access-requested-notification.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/subscribers/time-project-access-requested-notification.ts) |
+| staff:time-project-budget-threshold-notification | wildcard:staff.timesheets.time_entry.* | wildcard | — | [subscribers/time-project-budget-threshold-notification.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/subscribers/time-project-budget-threshold-notification.ts) |
+| staff:time-report-approved-notification | event:staff.timesheets.time_report.closed @staff | capability-only | — | [subscribers/time-report-approved-notification.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/subscribers/time-report-approved-notification.ts) |
+| staff:time-report-portal-broadcast | event:staff.timesheets.time_report.closed @staff | capability-only | — | [subscribers/time-report-portal-broadcast.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/subscribers/time-report-portal-broadcast.ts) |
+| staff.entity-extension.0:customers:customer_entity->staff:staff_time_entry | entity:customers:customer_entity @customers | capability-only | — | [data/extensions.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/extensions.ts) |
+| staff.entity-extension.1:customers:customer_deal->staff:staff_time_entry | entity:customers:customer_deal @customers | capability-only | — | [data/extensions.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/extensions.ts) |
+| staff.entity-extension.2:sales:sales_order->staff:staff_time_entry | entity:sales:sales_order @sales | capability-only | — | [data/extensions.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/extensions.ts) |
+| staff.entity-extension.3:customers:customer_entity->staff:staff_time_project | entity:customers:customer_entity @customers | capability-only | — | [data/extensions.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/extensions.ts) |
+| staff.injection.timer-sidebar-indicator@backend:sidebar:nav:footer | widget-spot:backend:sidebar:nav:footer | optional-target-missing | — | [widgets/injection-table.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/widgets/injection-table.ts) |
+| staff.time-report-approved-event | notification:staff.timesheets.time_report.approved | capability-only | — | [notifications.handlers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.handlers.ts) |
+| staff.time-report-ready-for-approval-event | notification:staff.timesheets.time_report.ready_for_approval | capability-only | — | [notifications.handlers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.handlers.ts) |
+| staff.timer-running-long-toast | notification:staff.timesheets.time_entry.timer_running_long | capability-only | — | [notifications.handlers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.handlers.ts) |
+| staff.timesheet-period-incomplete-event | notification:staff.timesheets.timesheet.period_incomplete | capability-only | — | [notifications.handlers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/notifications.handlers.ts) |
+| staff.timesheets-projects-portfolio | entity:staff:staff_time_project @staff | bound | entity:staff:staff_time_project:crud-response-enricher | [data/enrichers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/enrichers.ts) |
+| staff.timesheets-reports | entity:staff:staff_time_report @staff | bound | entity:staff:staff_time_report:crud-response-enricher | [data/enrichers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/enrichers.ts) |
+| staff.timesheets-tasks-context | entity:staff:staff_time_task @staff | bound | entity:staff:staff_time_task:crud-response-enricher | [data/enrichers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/enrichers.ts) |
+| staff.timesheets-tasks-rollup | entity:staff:staff_time_task @staff | bound | entity:staff:staff_time_task:crud-response-enricher | [data/enrichers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/enrichers.ts) |
+| staff.timesheets-tasks-tags | entity:staff:staff_time_task @staff | bound | entity:staff:staff_time_task:crud-response-enricher | [data/enrichers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/enrichers.ts) |
+| staff.timesheets-time-entries | entity:staff:staff_time_entry @staff | bound | entity:staff:staff_time_entry:crud-response-enricher | [data/enrichers.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/data/enrichers.ts) |
+| staff.timesheets.self-scope-time-entries | api-route:staff/timesheets/time-entries @staff | bound | api-route:staff/timesheets/time-entries:GET:api-interceptor-bridge | [api/interceptors.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/api/interceptors.ts) |
+| staff.timesheets.self-scope-widget-data | api-route:dashboards/widgets/data @dashboards | bound | api-route:dashboards/widgets/data:POST:api-interceptor-bridge | [api/interceptors.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/api/interceptors.ts) |
+| staff.timesheets.time_entry.created.browser | event:staff.timesheets.time_entry.created @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_entry.deleted.browser | event:staff.timesheets.time_entry.deleted @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_entry.timer_started.browser | event:staff.timesheets.time_entry.timer_started @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_entry.timer_stopped.browser | event:staff.timesheets.time_entry.timer_stopped @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_entry.updated.browser | event:staff.timesheets.time_entry.updated @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_project.budget_threshold_reached.browser | event:staff.timesheets.time_project.budget_threshold_reached @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_report.closed.browser | event:staff.timesheets.time_report.closed @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_report.portal_published.browser | event:staff.timesheets.time_report.portal_published @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_report.unlocked.browser | event:staff.timesheets.time_report.unlocked @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+| staff.timesheets.time_task.status_changed.browser | event:staff.timesheets.time_task.status_changed @staff | capability-only | — | [events.ts](../../../../node_modules/@open-mercato/core/src/modules/staff/events.ts) |
+
+<!-- end module facts section: staff/contribution-resolutions -->
