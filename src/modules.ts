@@ -117,6 +117,18 @@ export const enabledModules: ModuleEntry[] = [
   // OM_ENABLE_ENTERPRISE_MODULES + OM_ENABLE_ENTERPRISE_MODULES_AGENTS.
   { id: 'translations', from: '@open-mercato/core' },
   { id: 'scheduler', from: '@open-mercato/scheduler' },
+  // The proposal detail page is replaced by an app overlay file at
+  // `src/modules/inbox_ops/backend/inbox-ops/proposals/[id]/`, not by an
+  // `overrides.routes.pages` entry. Two reasons:
+  //  - `scanModuleDir` keys discovered files by logical path and lets the app
+  //    copy win, so the overlay replaces core's page instead of adding a
+  //    second manifest entry for the same URL.
+  //  - This file is compiled by esbuild with `bundle: true` for the CLI,
+  //    worker and scheduler, which inlines the whole relative import graph.
+  //    A loader reaching a React page dragged Next's client-only Link import
+  //    into `.mercato/generated/app-modules-overrides.compiled.mjs`, which
+  //    plain Node ESM cannot resolve, and every `yarn mercato` command died.
+  //    `src/modules.ts` has to stay data Node can evaluate.
   { id: 'inbox_ops', from: '@open-mercato/core' },
   { id: 'payment_gateways', from: '@open-mercato/core' },
   { id: 'checkout', from: '@open-mercato/checkout' },
@@ -154,6 +166,10 @@ export const enabledModules: ModuleEntry[] = [
   { id: 'customer_accounts', from: '@open-mercato/core' },
   { id: 'portal', from: '@open-mercato/core' },
   { id: 'ratelimit_probe', from: '@app' },
+  // App-owned proof that `inbox-actions.ts` discovery injects a custom action
+  // into the generated inbox-action registry and that the inbox_ops execution
+  // engine runs it on human accept. No LLM, no webhook, no new entity.
+  { id: 'offer_automation', from: '@app' },
 ]
 
 // Official modules activated via official-modules.json / official-modules.local.json
